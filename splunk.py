@@ -14,6 +14,10 @@ import re
 from configparser import SafeConfigParser
 from getpass import getpass
 
+# Remove any proxy environment variables.
+os.environ['http_proxy'] = ''
+os.environ['https_proxy'] = ''
+
 # encryption support
 def encrypt_password(password):
     from Crypto.Cipher import ARC4
@@ -51,7 +55,7 @@ parser.add_argument('-u', '--user', required=False, default=None, dest='username
     help="Your splunk username.")
 parser.add_argument('-p', '--password', required=False, default=False, action='store_true', dest='password',
     help="Prompt for a password (will not echo.)")
-parser.add_argument('-m', '--max-result-count', required=False, default=None, type=int, dest='max_result_count',
+parser.add_argument('-m', '--max-result-count', required=False, default=1000, type=int, dest='max_result_count',
     help="Maximum number of results to return.  Defaults to 1000")
 
 parser.add_argument('-s', '--start-time', required=False, default=None, dest='start_time',
@@ -63,6 +67,8 @@ parser.add_argument('-S', '--relative-start-time', required=False, default=None,
     help="Specify the starting time as a time relative to now in DD:HH:MM:SS format.")
 parser.add_argument('-E', '--relative-end-time', required=False, default=None, dest='relative_end_time',
     help="Specify the ending time as a time relative to now in DD:HH:MM:SS format.")
+parser.add_argument('--enviro', action='store', required=True, default='production', dest='enviro',
+    help="Specify which splunk environment to query (default=production). These are the sections defined in your config file.")
 
 # the options only apply in the default csv mode
 parser.add_argument('--headers', required=False, default=False, action='store_true', dest='headers',
@@ -107,7 +113,7 @@ logging.basicConfig(
 if args.save_config:
     config_path = os.path.join(os.path.expanduser('~'), '.splunklib.ini')
     with open(config_path, 'w') as fp:
-        fp.write('[splunklib]\n')
+        fp.write('[production]\n')
         if args.uri is not None:
             fp.write('uri = {0}\n'.format(args.uri))
         if args.username is not None:
@@ -158,14 +164,12 @@ if os.path.exists(config_path) and not args.ignore_config:
     config = SafeConfigParser()
     config.read(config_path)
     try:
-        if config.has_option('splunklib', 'uri'):
-            uri = config.get('splunklib', 'uri')
-        if config.has_option('splunklib', 'username'):
-            username = config.get('splunklib', 'username')
-        if config.has_option('splunklib', 'encrypted_password'):
-            encrypted_password = config.get('splunklib', 'encrypted_password')
+        uri = config.get(args.enviro, 'uri')
+        username = config.get(args.enviro, 'username')
+        if config.has_option(args.enviro, 'encrypted_password'):
+            encrypted_password = config.get(args.enviro, 'encrypted_password')
         else:
-            if config.has_option('splunklib', 'password'):
+            if config.has_option(args.enviro, 'password'):
                 # make sure permissions are sane
                 if os.stat(config_path).st_mode & stat.S_IROTH:
                     sys.stderr.write("""
@@ -180,10 +184,10 @@ so that other people cannot read it
 
 """.format(config_path))
 
-                password = config.get('splunklib', 'password')
+                password = config.get(args.enviro, 'password')
 
-        if config.has_option('splunklib', 'max_result_count'):
-            max_result_count = config.getint('splunklib', 'max_result_count')
+        if config.has_option(args.enviro, 'max_result_count'):
+            max_result_count = config.getint(args.enviro, 'max_result_count')
 
     except Exception as e:
         logging.warning("invalid configuration file {0}: {1}".format(config_path, str(e)))
